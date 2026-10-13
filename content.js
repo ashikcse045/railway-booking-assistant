@@ -237,6 +237,67 @@
       .filter(b => b.title.startsWith(coachName + '-') && isSeatFree(b));
   }
 
+  const allSeats = (coachName) =>
+    Array.from(document.querySelectorAll('app-seat-layout button.btn-seat'))
+      .filter(b => b.title.startsWith(coachName + '-'));
+
+  const seatNo = (btn) => parseInt(btn.title.slice(btn.title.lastIndexOf('-') + 1), 10) || 0;
+
+  // Lower rank = better. Tiers: 35..15, then 46..70, then other middle seats, terminal seats last.
+  // The ranges are defined for an 80-seat coach and scaled to the real coach size
+  // (e.g. 100 seats -> 19..44 and 58..87).
+  function seatRank(n, size) {
+    const s = Math.max(size || 80, 1) / 80;
+    const first = [Math.ceil(15 * s), Math.floor(35 * s)];
+    const second = [Math.ceil(46 * s), Math.floor(70 * s)];
+    const edge = Math.max(1, Math.round(6 * s)); // first/last seats of a coach
+    if (n >= first[0] && n <= first[1]) return first[1] - n;          // high -> low
+    if (n >= second[0] && n <= second[1]) return 1000 + (n - second[0]); // low -> high
+    if (n <= edge || n > size - edge) return 3000 + n;                // terminal, last resort
+    return 2000 + n;
+  }
+
+  // Pick `want` free seats in one coach: seats 2-3 together in one row (adjacent first),
+  // otherwise / as a fallback the best-ranked seats.
+  function chooseSeats(coachName, size, want) {
+    const rankOf = (b) => seatRank(seatNo(b), size);
+    const byRank = (list) => list.slice().sort((x, y) => rankOf(x) - rankOf(y));
+    const sum = (list) => list.reduce((t, b) => t + rankOf(b), 0);
+    const free = freeSeats(coachName);
+    if (want >= 2 && want <= 3) {
+      let bestPick = null;
+      const consider = (tier, list) => {
+        const key = [tier, sum(list)];
+        if (!bestPick || key[0] < bestPick.key[0] || (key[0] === bestPick.key[0] && key[1] < bestPick.key[1])) {
+          bestPick = { key, list };
+        }
+      };
+      const rows = new Map();
+      for (const b of allSeats(coachName)) {
+        const row = b.closest('.seat-row');
+        if (row) (rows.get(row) || rows.set(row, []).get(row)).push(b);
+      }
+      for (const seats of rows.values()) {
+        // adjacent seats on one side of the aisle
+        const groups = new Map();
+        for (const b of seats) {
+          const g = b.closest('.seat-in-row');
+          (groups.get(g) || groups.set(g, []).get(g)).push(b);
+        }
+        for (const g of groups.values()) {
+          for (let i = 0; i + want <= g.length; i++) {
+            const win = g.slice(i, i + want);
+            if (win.every(isSeatFree)) consider(0, win);
+          }
+        }
+        const rowFree = seats.filter(isSeatFree);
+        if (rowFree.length >= want) consider(1, byRank(rowFree).slice(0, want));
+      }
+      if (bestPick) return bestPick.list.map(b => b.title);
+    }
+    return byRank(free).slice(0, want).map(b => b.title);
+  }
+
   async function selectSeatsAndContinue(seatCount) {
     const select = await waitUntil(() => {
       const s = document.querySelector('app-seat-layout #select-bogie');
@@ -255,24 +316,45 @@
       return;
     }
 
-    // Prefer a coach that can seat everyone; otherwise take the biggest one
-    const coach = coaches.find(c => c.seats >= wanted) || coaches[0];
-    const count = Math.min(wanted, coach.seats);
-
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
-    setter.call(select, coach.value);
-    select.dispatchEvent(new Event('input', { bubbles: true }));
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const showCoach = async (c) => {
+      setter.call(select, c.value);
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const ok = await waitUntil(() => freeSeats(c.name).length > 0);
+      if (ok) await sleep(300);
+      return !!ok;
+    };
 
-    if (!await waitUntil(() => freeSeats(coach.name).length > 0)) {
+    // Look at every coach: most free seats wins, a bigger coach breaks ties
+    let best = null;
+    for (const c of coaches) {
+      if (!await showCoach(c)) continue;
+      const size = Math.max(0, ...allSeats(c.name).map(seatNo));
+      const titles = chooseSeats(c.name, size, wanted);
+      if (!titles.length) continue;
+      if (!best || c.seats > best.coach.seats || (c.seats === best.coach.seats && size > best.size)) {
+        best = { coach: c, size, titles };
+      }
+    }
+    if (!best) {
+      showNotification('No coach has a free seat', 'error');
+      return;
+    }
+
+    const coach = best.coach;
+    const count = best.titles.length;
+    if (!await showCoach(coach)) {
       showNotification(`Coach ${coach.name}: no free seat found`, 'error');
       return;
     }
-    await sleep(300);
 
     let picked = 0;
     const chosen = [];
-    for (const seat of freeSeats(coach.name)) {
+    const pickList = best.titles
+      .map(t => freeSeats(coach.name).find(b => b.title === t))
+      .filter(Boolean);
+    for (const seat of pickList) {
       if (picked >= count) break;
       seat.scrollIntoView({ behavior: 'auto', block: 'center' });
       await sleep(150);
