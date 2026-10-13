@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Bangladesh Railway Booking Assistant",
+  "version": "1.0.0",
+  "description": "A lightweight assistant to help book Bangladesh Railway tickets through the official website.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Railway Booking Assistant"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://eticket.railway.gov.bd/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://eticket.railway.gov.bd/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["https://eticket.railway.gov.bd/*"]
+    }
+  ]
+}

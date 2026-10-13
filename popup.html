@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Railway Booking Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Railway Booking Assistant</h1>
+      <p class="subtitle">Bangladesh Railway</p>
+    </header>
+
+    <div id="step-search" class="step active">
+      <h3>Step 1: Search Trains</h3>
+      <form id="search-form" class="booking-form">
+        <div class="form-group">
+          <label for="departure">Departure Station</label>
+          <select id="departure" required>
+            <option value="">Select departure</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="destination">Destination Station</label>
+          <select id="destination" required>
+            <option value="">Select destination</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="journey-date">Journey Date</label>
+          <input type="date" id="journey-date" required>
+        </div>
+
+        <div class="form-group hidden" id="train-choice-group">
+          <label for="train-choice">Train (running on selected date)</label>
+          <select id="train-choice">
+            <option value="">Any available train</option>
+          </select>
+          <p class="settings-hint" id="train-choice-hint"></p>
+        </div>
+
+        <div class="form-group">
+          <label for="seat-class">Seat Class</label>
+          <select id="seat-class" required>
+            <option value="">Select class</option>
+            <option value="SNIGDHA">Snigdha</option>
+            <option value="S_CHAIR">Shovan Chair (S_CHAIR)</option>
+            <option value="AC_S">AC Seat (AC_S)</option>
+            <option value="AC_B">AC Berth (AC_B)</option>
+            <option value="SHOVAN">Shovan</option>
+            <option value="SHULOV">Shulov</option>
+            <option value="F_SEAT">First Seat (F_SEAT)</option>
+            <option value="F_BERTH">First Berth (F_BERTH)</option>
+            <option value="F_CHAIR">First Chair (F_CHAIR)</option>
+          </select>
+        </div>
+
+        <div class="button-group">
+          <button type="button" id="start-search" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            Start Search
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div id="step-train" class="step hidden">
+      <h3>Step 2: Select Train</h3>
+      <form id="train-form" class="booking-form">
+        <div class="form-group">
+          <label for="train-filter">Train Filter (name or time, e.g. "Silk City" or "07:30")</label>
+          <input type="text" id="train-filter" placeholder="Optional: filter by train name or departure time">
+        </div>
+        <div class="form-group">
+          <label for="train-index">Or select by position</label>
+          <select id="train-index">
+            <option value="">Auto: first available</option>
+            <option value="0">1st train</option>
+            <option value="1">2nd train</option>
+            <option value="2">3rd train</option>
+            <option value="3">4th train</option>
+            <option value="4">5th train</option>
+          </select>
+        </div>
+        <div class="button-group">
+          <button type="button" id="select-train" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+            Select Train & Book
+          </button>
+          <button type="button" id="back-to-search" class="btn btn-secondary">Back</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="step-passengers" class="step hidden">
+      <h3>Step 3: Passenger Details</h3>
+      <form id="passenger-form" class="booking-form">
+        <div id="passenger-fields"></div>
+        <div class="button-group">
+          <button type="button" id="fill-passengers" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M10 12h4"/>
+              <path d="M12 10v4"/>
+            </svg>
+            Fill Passenger Details
+          </button>
+          <button type="button" id="back-to-train" class="btn btn-secondary">Back</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="step-complete" class="step hidden">
+      <h3>Booking Ready</h3>
+      <div class="success-message">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <p>Passenger details filled. Please complete manually:</p>
+        <ul>
+          <li>✅ Solve CAPTCHA</li>
+          <li>✅ Enter OTP</li>
+          <li>✅ Complete payment</li>
+        </ul>
+      </div>
+      <button type="button" id="new-booking" class="btn btn-primary">New Booking</button>
+    </div>
+
+    <div id="status" class="status hidden" role="alert"></div>
+
+    <details class="settings">
+      <summary>Settings</summary>
+      <div class="settings-content">
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-fill" checked>
+          <span>Auto-fill on supported pages</span>
+        </label>
+        <p class="settings-hint">When enabled, form fields will be filled automatically when you visit a supported booking page.</p>
+      </div>
+    </details>
+
+    <footer>
+      <p>Data stored locally. No passwords or sensitive info saved.</p>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
