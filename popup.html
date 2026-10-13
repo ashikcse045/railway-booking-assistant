@@ -18,16 +18,14 @@
       <form id="search-form" class="booking-form">
         <div class="form-group">
           <label for="departure">Departure Station</label>
-          <select id="departure" required>
-            <option value="">Select departure</option>
-          </select>
+          <input type="text" id="departure" list="departure-list" placeholder="Type to search station" autocomplete="off" required>
+          <datalist id="departure-list"></datalist>
         </div>
 
         <div class="form-group">
           <label for="destination">Destination Station</label>
-          <select id="destination" required>
-            <option value="">Select destination</option>
-          </select>
+          <input type="text" id="destination" list="destination-list" placeholder="Type to search station" autocomplete="off" required>
+          <datalist id="destination-list"></datalist>
         </div>
 
         <div class="form-group">
@@ -44,7 +42,7 @@
         </div>
 
         <div class="form-group">
-          <label for="seat-class">Seat Class</label>
+          <label for="seat-class">Seat Class (1st choice)</label>
           <select id="seat-class" required>
             <option value="">Select class</option>
             <option value="SNIGDHA">Snigdha</option>
@@ -56,6 +54,23 @@
             <option value="F_SEAT">First Seat (F_SEAT)</option>
             <option value="F_BERTH">First Berth (F_BERTH)</option>
             <option value="F_CHAIR">First Chair (F_CHAIR)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>If no seat in that class, try next (in order)</label>
+          <select id="seat-class-2"></select>
+          <select id="seat-class-3"></select>
+          <select id="seat-class-4"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="seat-count">Number of Seats (max 4)</label>
+          <select id="seat-count">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
           </select>
         </div>
 
@@ -146,6 +161,11 @@
           <span>Auto-fill on supported pages</span>
         </label>
         <p class="settings-hint">When enabled, form fields will be filled automatically when you visit a supported booking page.</p>
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-continue">
+          <span>Auto-click "Continue Purchase"</span>
+        </label>
+        <p class="settings-hint">When off, seats are selected but you click Continue Purchase yourself (it sends an OTP and locks booking for ~10 min, so keep it off while testing).</p>
       </div>
     </details>
 
@@ -154,6 +174,7 @@
     </footer>
   </div>
 
+  <script src="train-data.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

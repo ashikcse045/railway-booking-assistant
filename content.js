@@ -140,7 +140,20 @@
       const seatClassOf = (el) =>
         (el.querySelector('.seat-class-name')?.textContent || '').trim().toUpperCase();
       const bookBtnOf = (el) => el.querySelector('.book-now-btn');
-      const wantedClass = (data.seatClass || '').trim().toUpperCase();
+      // Seat classes in priority order (1st choice first)
+      const wanted = (data.seatClasses?.length ? data.seatClasses : [data.seatClass])
+        .map(x => (x || '').trim().toUpperCase()).filter(Boolean);
+      const blocksOf = (card) => Array.from(card.querySelectorAll('.single-seat-class'));
+      // First class in priority order that this train still sells (no class preference: any)
+      const pickBlock = (card) => {
+        const blocks = blocksOf(card);
+        if (!wanted.length) return blocks.find(bookBtnOf);
+        for (const cls of wanted) {
+          const b = blocks.find(s => seatClassOf(s) === cls && bookBtnOf(s));
+          if (b) return b;
+        }
+        return null;
+      };
 
       let targetTrain = null;
       if (data.filter) {
@@ -149,30 +162,24 @@
       } else if (data.index !== null && data.index !== undefined && data.index < cards.length) {
         targetTrain = cards[data.index];
       } else {
-        // First train that has any bookable seat in the wanted class (or any class)
-        targetTrain = cards.find(c => Array.from(c.querySelectorAll('.single-seat-class'))
-          .some(s => bookBtnOf(s) && (!wantedClass || seatClassOf(s) === wantedClass)));
+        // Best class wins: look for a train with the 1st choice, then the 2nd, ...
+        targetTrain = (wanted.length ? wanted : [null]).map(cls =>
+          cards.find(c => blocksOf(c).some(s => bookBtnOf(s) && (!cls || seatClassOf(s) === cls)))
+        ).find(Boolean);
       }
 
       if (!targetTrain) {
-        showNotification('No matching train found', 'error');
+        showNotification(`No train has seats in ${wanted.join(' / ') || 'any class'}`, 'error');
         return;
       }
 
       const name = trainName(targetTrain);
-      const seatBlocks = Array.from(targetTrain.querySelectorAll('.single-seat-class'));
-      let seatBlock = wantedClass ? seatBlocks.find(s => seatClassOf(s) === wantedClass) : null;
-
-      if (wantedClass && !seatBlock) {
-        showNotification(`${name}: class ${wantedClass} not offered (has: ${seatBlocks.map(seatClassOf).join(', ')})`, 'error');
-        return;
-      }
-      if (!seatBlock) seatBlock = seatBlocks.find(s => bookBtnOf(s));
-
+      const seatBlock = pickBlock(targetTrain);
       const bookButton = seatBlock && bookBtnOf(seatBlock);
       if (!bookButton) {
-        const left = seatBlock?.querySelector('.all-seats')?.textContent.trim() ?? '0';
-        showNotification(`${name}: ${wantedClass || 'class'} has no seats available (${left})`, 'error');
+        const have = blocksOf(targetTrain)
+          .map(s => `${seatClassOf(s)}: ${s.querySelector('.all-seats')?.textContent.trim() ?? '0'}`).join(', ');
+        showNotification(`${name}: no seats in ${wanted.join(' / ')} (${have})`, 'error');
         return;
       }
 
@@ -189,11 +196,121 @@
       showNotification(`Booking ${name} - ${seatClassOf(seatBlock)}`);
       clickElement(bookButton);
 
+      await selectSeatsAndContinue(data.seatCount);
+
     } catch (error) {
       console.error('[Railway Assistant] selectTrainAndBook error:', error);
       showNotification('Error: ' + error.message, 'error');
     }
   };
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function waitUntil(fn, timeout = 8000, interval = 150) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const v = fn();
+      if (v) return v;
+      await sleep(interval);
+    }
+    return null;
+  }
+
+  // Coaches with seats, most seats first. Option text looks like "JA - 18 Seat(s)"
+  function coachesWithSeats(select) {
+    return Array.from(select.options)
+      .map(o => {
+        const m = o.textContent.trim().match(/^(.*?)\s*-\s*(\d+)\s*Seat/i);
+        return m ? { value: o.value, name: m[1].trim(), seats: parseInt(m[2], 10) } : null;
+      })
+      .filter(c => c && c.seats > 0)
+      .sort((a, b) => b.seats - a.seats);
+  }
+
+  const isSeatFree = (btn) =>
+    !btn.disabled && !btn.classList.contains('seat-hidden') &&
+    !btn.classList.contains('seat-booked') && !btn.classList.contains('seat-progress') &&
+    !btn.classList.contains('seat-selected');
+
+  function freeSeats(coachName) {
+    return Array.from(document.querySelectorAll('app-seat-layout button.btn-seat'))
+      .filter(b => b.title.startsWith(coachName + '-') && isSeatFree(b));
+  }
+
+  async function selectSeatsAndContinue(seatCount) {
+    const select = await waitUntil(() => {
+      const s = document.querySelector('app-seat-layout #select-bogie');
+      return s && s.options.length ? s : null;
+    }, 15000);
+    if (!select) {
+      showNotification('Seat layout did not load', 'error');
+      return;
+    }
+
+    // Site allows max 4 seats per booking
+    const wanted = Math.min(Math.max(parseInt(seatCount, 10) || 1, 1), 4);
+    const coaches = coachesWithSeats(select);
+    if (!coaches.length) {
+      showNotification('No coach has available seats', 'error');
+      return;
+    }
+
+    // Prefer a coach that can seat everyone; otherwise take the biggest one
+    const coach = coaches.find(c => c.seats >= wanted) || coaches[0];
+    const count = Math.min(wanted, coach.seats);
+
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+    setter.call(select, coach.value);
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    if (!await waitUntil(() => freeSeats(coach.name).length > 0)) {
+      showNotification(`Coach ${coach.name}: no free seat found`, 'error');
+      return;
+    }
+    await sleep(300);
+
+    let picked = 0;
+    const chosen = [];
+    for (const seat of freeSeats(coach.name)) {
+      if (picked >= count) break;
+      seat.scrollIntoView({ behavior: 'auto', block: 'center' });
+      await sleep(150);
+      seat.click();
+      // Site books each seat server-side; wait for it to leave the "free" state
+      const ok = await waitUntil(() => !isSeatFree(seat), 5000);
+      if (ok) {
+        picked++;
+        chosen.push(seat.title);
+      }
+      await sleep(300);
+    }
+
+    if (!picked) {
+      showNotification(`Coach ${coach.name}: could not select a seat`, 'error');
+      return;
+    }
+
+    const cont = document.querySelector('app-seat-layout .continue-btn');
+    if (!cont) {
+      showNotification('CONTINUE PURCHASE button not found', 'error');
+      return;
+    }
+    const autoContinue = await new Promise(resolve => {
+      try {
+        chrome.storage.local.get('autoContinue', r => resolve(r?.autoContinue === true));
+      } catch (e) {
+        resolve(false);
+      }
+    });
+    if (!autoContinue) {
+      showNotification(`Selected ${chosen.join(', ')} - click CONTINUE PURCHASE yourself`);
+      return;
+    }
+    showNotification(`Selected ${chosen.join(', ')} - continuing`);
+    await sleep(300);
+    cont.click();
+  }
 
   window.fillPassengerDetails = async function(data) {
     if (!isPassengerPage()) {
